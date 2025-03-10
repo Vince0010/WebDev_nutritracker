@@ -1,4 +1,73 @@
 
+<?php
+session_start();
+require_once 'includes/header.php';
+$host = "localhost";
+$username = "root";
+$password = "";
+$database = "nutrition_tracker";
+
+$conn = new mysqli($host, $username, $password, $database);
+
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+if (!isset($_SESSION["user_id"])) {
+    echo json_encode(["error" => "User not logged in"]);
+    exit();
+}
+
+$user_id = $_SESSION["user_id"];
+
+// Get current date and the start of the current week (Monday)
+$currentDate = date('Y-m-d');
+$startOfWeek = date('Y-m-d', strtotime('monday this week'));
+
+// Default period is week
+$period = 'week';  // Set period to 'week' to only consider weekly data
+
+// Fetch weekly intake (from Monday to today)
+$totalIntakeQuery = "SELECT SUM(calories) AS total_calories, SUM(protein) AS total_protein, SUM(carbs) AS total_carbs
+                     FROM meals WHERE user_id = ? AND DATE(date_added) >= ?";
+$stmt = $conn->prepare($totalIntakeQuery);
+$stmt->bind_param("is", $user_id, $startOfWeek);
+$stmt->execute();
+$totalIntakeResult = $stmt->get_result()->fetch_assoc();
+$totalCalories = $totalIntakeResult['total_calories'] ?: 0;
+$totalProtein = $totalIntakeResult['total_protein'] ?: 0;
+$totalCarbs = $totalIntakeResult['total_carbs'] ?: 0;
+$stmt->close();
+
+// Pagination Setup
+$limit = 13; // Meals per page
+$page = isset($_GET['page']) && is_numeric($_GET['page']) ? $_GET['page'] : 1;
+$offset = ($page - 1) * $limit;
+
+// Get Total Meals Count for this week
+$totalMealsQuery = "SELECT COUNT(*) as total FROM meals WHERE user_id = ? AND DATE(date_added) >= ?";
+$stmt = $conn->prepare($totalMealsQuery);
+$stmt->bind_param("is", $user_id, $startOfWeek);
+$stmt->execute();
+$totalMealsResult = $stmt->get_result()->fetch_assoc();
+$totalMeals = $totalMealsResult['total'];
+$totalPages = ceil($totalMeals / $limit);
+$stmt->close();
+
+// Fetch Meals with Pagination for this week
+$meals = [];
+$sql = "SELECT meal_name, calories, protein, carbs, date_added FROM meals WHERE user_id = ? AND DATE(date_added) >= ? ORDER BY date_added DESC LIMIT ? OFFSET ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("isii", $user_id, $startOfWeek, $limit, $offset);
+$stmt->execute();
+$result = $stmt->get_result();
+while ($row = $result->fetch_assoc()) {
+    $meals[] = $row;
+}
+$stmt->close();
+$conn->close();
+?>
+
 
 
 <head>
@@ -238,10 +307,7 @@
             <!-- ===== 
        
       
-      Sidebar End 
-       
-       
-       ===== -->
+    
 
 
 
@@ -272,7 +338,7 @@
                                                     Intake</span>
                                                 <h4
                                                     class="mt-2 text-title-sm font-bold text-gray-800 dark:text-white/90">
-                                                    3,782 cal
+                                                    <?= htmlspecialchars($totalCalories) ?> kcal
                                                 </h4>
                                             </div>
 
@@ -370,41 +436,46 @@
 
                                             <!-- Button (on the right side) -->
                                             <div>
-                                            <input type="text" id="foodInput" placeholder="Enter food name" />
-                                            <button onclick="fetchCalories()">Search</button>
-                                            <div id="results"></div>
+                                                <input type="text" id="foodInput" placeholder="Enter food name" />
+                                                <button onclick="fetchCalories()">Search</button>
+                                                <!-- Submit Button -->
+                                                <button id="submitGoals"
+                                                    class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg">Save
+                                                    Goals</button>
+
+                                                <div id="results"></div>
                                             </div>
                                         </div>
 
                                     </div>
                                     <!-- GOAL 1 -->
                                     <br><br>
-    <!-- GOAL 1 (Calories) -->
-    <div class="w-full rounded-xl border border-gray-200 bg-white shadow-sm">
-        <h5 class="mb-2 text-lg font-semibold text-gray-900">Calories</h5>
-        <p class="text-sm text-gray-700">Calories needed to sustain basic functions.</p>
-        <div class="pb-1">
-            <div id="bmr1" class="text-lg text-gray-900 font-bold">0 kcal</div>
-        </div>
-    </div>
+                                    <!-- GOAL 1 (Calories) -->
+                                    <div class="w-full rounded-xl border border-gray-200 bg-white shadow-sm">
+                                        <h5 class="mb-2 text-lg font-semibold text-gray-900">Calories</h5>
+                                        <p class="text-sm text-gray-700">Calories needed to sustain basic functions.</p>
+                                        <div class="pb-1">
+                                            <div id="bmr1" class="text-lg text-gray-900 font-bold">0 kcal</div>
+                                        </div>
+                                    </div>
 
-    <!-- GOAL 2 (Protein) -->
-    <div class="w-full rounded-xl border border-gray-200 bg-white shadow-sm">
-        <h5 class="mb-2 text-lg font-semibold text-gray-900">Protein Intake</h5>
-        <p class="text-sm text-gray-700">Protein requirement for muscle maintenance.</p>
-        <div class="pb-1">
-            <div id="bmr2" class="text-lg text-gray-900 font-bold">0 g</div>
-        </div>
-    </div>
+                                    <!-- GOAL 2 (Protein) -->
+                                    <div class="w-full rounded-xl border border-gray-200 bg-white shadow-sm">
+                                        <h5 class="mb-2 text-lg font-semibold text-gray-900">Protein Intake</h5>
+                                        <p class="text-sm text-gray-700">Protein requirement for muscle maintenance.</p>
+                                        <div class="pb-1">
+                                            <div id="bmr2" class="text-lg text-gray-900 font-bold">0 g</div>
+                                        </div>
+                                    </div>
 
-    <!-- GOAL 3 (Carbohydrates) -->
-    <div class="w-full rounded-xl border border-gray-200 bg-white shadow-sm">
-        <h5 class="mb-2 text-lg font-semibold text-gray-900">Carbohydrates</h5>
-        <p class="text-sm text-gray-700">Carbs are the primary source of energy.</p>
-        <div class="pb-1">
-            <div id="bmr3" class="text-lg text-gray-900 font-bold">0 g</div>
-        </div>
-    </div>
+                                    <!-- GOAL 3 (Carbohydrates) -->
+                                    <div class="w-full rounded-xl border border-gray-200 bg-white shadow-sm">
+                                        <h5 class="mb-2 text-lg font-semibold text-gray-900">Carbohydrates</h5>
+                                        <p class="text-sm text-gray-700">Carbs are the primary source of energy.</p>
+                                        <div class="pb-1">
+                                            <div id="bmr3" class="text-lg text-gray-900 font-bold">0 g</div>
+                                        </div>
+                                    </div>
 
 
                                 </div>
@@ -752,6 +823,41 @@
 </svg>
 
 <div class="jvm-tooltip"></div>
+
+<script>
+    document.getElementById("submitGoals").addEventListener("click", async function () {
+        const meal_name = document.getElementById("food_search").value.trim(); // Get the food input
+        const calories = document.getElementById("bmr1").innerText.replace(" kcal", "").trim();
+        const protein = document.getElementById("bmr2").innerText.replace(" g", "").trim();
+        const carbs = document.getElementById("bmr3").innerText.replace(" g", "").trim();
+
+        if (!meal_name) {
+            alert("Please enter a meal name before submitting!");
+            return;
+        }
+
+        const response = await fetch("addmeals.php", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                meal_name: meal_name,
+                calories: calories,
+                protein: protein,
+                carbs: carbs
+            })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            alert("Meal goals saved successfully!");
+        } else {
+            alert("Failed to save meal goals: " + result.error);
+        }
+    });
+</script>
+
 
 </body>
 

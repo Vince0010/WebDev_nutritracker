@@ -11,6 +11,14 @@
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+
+  <script>
+    // Mobile menu toggle
+    document.getElementById('menu-btn').addEventListener('click', function () {
+      document.getElementById('mobile-menu').classList.toggle('open');
+    });
+  </script>
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Flowbite (for dropdowns, animations, etc.) -->
@@ -71,6 +79,8 @@
       }
     }
   </style>
+
+
 </head>
 
 <body class="bg-gray-50">
@@ -111,6 +121,8 @@
       document.getElementById('mobile-menu').classList.toggle('open');
     });
   </script>
+
+  
 </body>
 
 </html>
